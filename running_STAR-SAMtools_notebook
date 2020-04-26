@@ -1,0 +1,674 @@
+20190719
+
+Problem Set 8
+
+Part 1 - RNA-seq alignment
+
+Purpose: to understand how to map reads back to  an existing reference genome.
+
+Tools: Python 3.7.3
+	STAR 2.7.1a.  
+	samtools 1.9
+	talapas-ln1 
+
+Resources: Ensemble
+
+
+Setting up:  Login talapas: ssh gperez8@talapas-ln1.uoregon.edu:/projects/bgmp/shared/Bi621
+	         - 
+Created a new directory in gperez8 directory on HPC and symlinked the sequenced Illumina paired-end reads from zebrafish ovaries using the following commands:
+		.	% mkdir -p /projects/bgmp/YOU/Bi621/PS8	 			% cd /projects/bgmp/YOU/Bi621/PS8 			% ln -s /projects/bgmp/shared/Bi621/dre_WT_ovar12_R1.qtrim.fq.gz 
+			% ln -s /projects/bgmp/shared/Bi621/dre_WT_ovar12_R2.qtrim.fq.gz  			
+			- confirmation: gperez8@talapas-ln1 PS8]$ ls
+				dre_WT_ovar12_R1.qtrim.fq.gz  dre_WT_ovar12_R2.qtrim.fq.gz
+
+Navigated to the Ensemble website to get the zebrafish reference genome by chromosome (FASTA) and gene set (GTF):
+			- https://uswest.ensembl.org/info/data/ftp/index.html
+			- copied the file server link.
+			- ex.  ftp://ftp.ensembl.org/pub/release-97/fasta/danio_rerio/dna//Danio_rerio.GRCz11.dna.chromosome.1.fa.gz
+			- downloaded the gtf file into my directory in hpc
+			-ex: 
+			gperez8@talapas-ln1 PS8]$ wget ftp://ftp.ensembl.org/pub/release-97/gtf/danio_rerio//Danio_rerio.GRCz11.97.gtf.gz
+			- confirmation: [gperez8@talapas-ln1 PS8]$ ls
+							Danio_rerio.GRCz11.97.gtf.gz  dre_WT_ovar12_R2.qtrim.fq.gz
+							dre_WT_ovar12_R1.qtrim.fq.gz
+				-unzipped file: (bgmp_py3) [gperez8@talapas-ln1 PS8]$ gunzip Danio_rerio.GRCz11.97.gtf.gz 
+				- downloaded the gtf file into gperez8 directory in hpc
+				(bgmp_py3) [gperez8@talapas-ln1 PS8]$ wget ftp://ftp.ensembl.org/pub/release-97/fasta/danio_rerio/dna/Danio_rerio.GRCz11.dna.chromosome.*.fa.gz
+				-downloaded the chromosome files into gperez8 directory in hpc
+			 -bgmp_py3) [gperez8@talapas-ln1 PS8]$ wget ftp://ftp.ensembl.org/pub/release-97/fasta/danio_rerio/dna/Danio_rerio.GRCz11.dna.chromosome.*.fa.gz
+			 --unzipped files: gunzip Danio_rerio.GRCz11.dna*chromosome.*.fa.gz
+
+			- Created a Dre directory:(bgmp_py3) [gperez8@talapas-ln1 PS8]$ mkdir dre
+			- moved the files into the Dre directory: (bgmp_py3) [gperez8@talapas-ln1 PS8]$ mv Danio_rerio.GRCz11.*fa dre/
+
+Building a STAR database.
+
+			-Installing STAR:(bgmp_py3) [gperez8@talapas-ln1 ~]$ conda activate bgmp_py3
+								(bgmp_py3) [gperez8@talapas-ln1 ~]$ conda install star -c bioconda
+								(bgmp_py3) [gperez8@talapas-ln1 ~]$ STAR --version
+								2.7.1a
+				-Installing samtools: (bgmp_py3) [gperez8@talapas-ln1 ~]$ conda install samtools -c bioconda
+									 (bgmp_py3) [gperez8@talapas-ln1 ~]$ samtools --version
+									  samtools 1.9
+									  Using htslib 1.9
+									  Copyright (C) 2018 Genome Research Ltd.
+				-Created a script in bash using STAR to create a database: 
+				 /var/folders/x3/cql658p15ts__8mqw6cwrfn00000gn/T/53437c04/talapas-ln1.uoregon.edu/projects/bgmp/gperez8/Bi621/PS8/build_database.sh
+build_database.sh
+
+				-specifies what shell interpreter to use and must be on first line
+#!/bin/bash
+
+				-special comments that communicate job flags to SLURM 
+#SBATCH --account=bgmp
+#SBATCH --partition=bgmp
+#SBATCH --job-name=PS8
+#SBATCH --output=slurm-%j-%x.out
+#SBATCH --time=0-01:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=7
+
+				-makes sure to use the correct python version
+conda deactivate
+conda deactivate
+conda deactivate
+conda deactivate
+conda activate bgmp_py3
+
+
+				-creates variables
+genomeDir=Danio_rerio.GRCz11.dna.ens97.STAR_2.7.1a
+genomeFastaFiles=dre/Danio_rerio.GRCz11.dna.chromosome.*.fa
+sjdbGTFfile=Danio_rerio.GRCz11.97.gtf
+
+mkdir -p $genomeDir
+
+
+				-creates directory
+/usr/bin/time -v STAR --runThreadN 7 --runMode genomeGenerate \
+    --genomeDir $genomeDir \
+    --genomeFastaFiles $genomeFastaFiles \
+    --sjdbGTFfile $sjdbGTFfile
+
+
+
+
+
+					-submitting a job script 
+(bgmp_py3) [gperez8@talapas-ln1 PS8]$ sbatch build_database.sh 
+Submitted batch job 9617703
+
+					-displaying the state of the job queue
+(bgmp_py3) [gperez8@talapas-ln1 PS8]$ squeue -u gperez8
+             JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)
+           9617703      bgmp      PS8  gperez8  R       0:04      1 n218
+
+					-output after job finished running
+ (bgmp_py3) [gperez8@talapas-ln1 PS8]$ cat slurm-9617703-PS8.out                    
+Jul 19 10:40:30 ..... started STAR run
+Jul 19 10:40:30 ... starting to generate Genome files
+Jul 19 10:40:55 ... starting to sort Suffix Array. This may take a long time...
+Jul 19 10:41:00 ... sorting Suffix Array chunks and saving them to disk...
+Jul 19 10:47:57 ... loading chunks from disk, packing SA...
+Jul 19 10:48:20 ... finished generating suffix array
+Jul 19 10:48:20 ... generating Suffix Array index
+Jul 19 10:50:16 ... completed Suffix Array index
+Jul 19 10:50:16 ..... processing annotations GTF
+Jul 19 10:50:20 ..... inserting junctions into the genome indices
+Jul 19 10:51:57 ... writing Genome to disk ...
+Jul 19 10:51:58 ... writing Suffix Array to disk ...
+Jul 19 10:52:00 ... writing SAindex to disk
+Jul 19 10:52:01 ..... finished successfully
+	Command being timed: "STAR --runThreadN 7 --runMode genomeGenerate --genomeDir Danio_rerio.GRCz11.dna.ens97.STAR_2.7.1a --genomeFastaFiles dre/Danio_rerio.GRCz11.dna.chromosome.10.fa dre/Danio_rerio.GRCz11.dna.chromosome.11.fa dre/Danio_rerio.GRCz11.dna.chromosome.12.fa dre/Danio_rerio.GRCz11.dna.chromosome.13.fa dre/Danio_rerio.GRCz11.dna.chromosome.14.fa dre/Danio_rerio.GRCz11.dna.chromosome.15.fa dre/Danio_rerio.GRCz11.dna.chromosome.16.fa dre/Danio_rerio.GRCz11.dna.chromosome.17.fa dre/Danio_rerio.GRCz11.dna.chromosome.18.fa dre/Danio_rerio.GRCz11.dna.chromosome.19.fa dre/Danio_rerio.GRCz11.dna.chromosome.1.fa dre/Danio_rerio.GRCz11.dna.chromosome.20.fa dre/Danio_rerio.GRCz11.dna.chromosome.21.fa dre/Danio_rerio.GRCz11.dna.chromosome.22.fa dre/Danio_rerio.GRCz11.dna.chromosome.23.fa dre/Danio_rerio.GRCz11.dna.chromosome.24.fa dre/Danio_rerio.GRCz11.dna.chromosome.25.fa dre/Danio_rerio.GRCz11.dna.chromosome.2.fa dre/Danio_rerio.GRCz11.dna.chromosome.3.fa dre/Danio_rerio.GRCz11.dna.chromosome.4.fa dre/Danio_rerio.GRCz11.dna.chromosome.5.fa dre/Danio_rerio.GRCz11.dna.chromosome.6.fa dre/Danio_rerio.GRCz11.dna.chromosome.7.fa dre/Danio_rerio.GRCz11.dna.chromosome.8.fa dre/Danio_rerio.GRCz11.dna.chromosome.9.fa dre/Danio_rerio.GRCz11.dna.chromosome.MT.fa --sjdbGTFfile Danio_rerio.GRCz11.97.gtf"
+	User time (seconds): 2357.96
+	System time (seconds): 25.35
+	Percent of CPU this job got: 344%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 11:30.92
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 29637560
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 155442
+	Voluntary context switches: 17998
+	Involuntary context switches: 2983
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+
+
+Using STAR to to align the reads to the reference genome 
+
+-Created a script in bash using STAR to align the reads to the reference genome : 
+				/var/folders/x3/cql658p15ts__8mqw6cwrfn00000gn/T/53437c04/talapas-ln1.uoregon.edu/projects/bgmp/gperez8/Bi621/PS8/star_aligner.sh
+star_aligner.sh
+
+				-specifies what shell interpreter to use and must be on first line
+#!/bin/bash
+
+				-special comments that communicate job flags to SLURM 
+#SBATCH --account=bgmp
+#SBATCH --partition=bgmp
+#SBATCH --job-name=PS8
+#SBATCH --output=slurm-%j-%x.out
+#SBATCH --time=0-01:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=7
+						-makes sure to use the correct python version
+conda deactivate
+conda deactivate
+conda deactivate
+conda deactivate
+conda activate bgmp_py3
+
+
+					-creates variables
+genomeDir=Danio_rerio.GRCz11.dna.ens97.STAR_2.7.1a
+genomeFastaFiles=dre/Danio_rerio.GRCz11.dna.chromosome.*.fa
+sjdbGTFfile=Danio_rerio.GRCz11.97.gtf
+
+
+							-creates alignment
+/usr/bin/time -v STAR --runThreadN 7 --runMode alignReads --outFilterMultimapNmax 3 \
+  --outSAMunmapped Within KeepPairs \
+  --alignIntronMax 1000000 --alignMatesGapMax 1000000 --readFilesCommand zcat \
+  --readFilesIn dre_WT_ovar12_R1.qtrim.fq.gz dre_WT_ovar12_R2.qtrim.fq.gz --genomeDir $genomeDir \
+  --outFileNamePrefix aligned_Danio_rerio.GRCz11
+ 
+
+
+							-submitting a job script 
+(bgmp_py3) [gperez8@talapas-ln1 PS8]$ sbatch star_aligner.sh
+Submitted batch job 9617861
+
+							-output after job finished running
+(bgmp_py3) [gperez8@talapas-ln1 PS8]$ cat slurm-9617861-PS8.out
+Jul 19 11:01:33 ..... started STAR run
+Jul 19 11:01:33 ..... loading genome
+Jul 19 11:01:38 ..... started mapping
+Jul 19 11:05:10 ..... finished mapping
+Jul 19 11:05:10 ..... finished successfully
+	Command being timed: "STAR --runThreadN 7 --runMode alignReads --outFilterMultimapNmax 3 --outSAMunmapped Within KeepPairs --alignIntronMax 1000000 --alignMatesGapMax 1000000 --readFilesCommand zcat --readFilesIn dre_WT_ovar12_R1.qtrim.fq.gz dre_WT_ovar12_R2.qtrim.fq.gz --genomeDir Danio_rerio.GRCz11.dna.ens97.STAR_2.7.1a --outFileNamePrefix aligned_Danio_rerio.GRCz11"
+	User time (seconds): 1281.82
+	System time (seconds): 10.94
+	Percent of CPU this job got: 593%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 3:37.94
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 15817240
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 489934
+	Voluntary context switches: 69603
+	Involuntary context switches: 13041
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+
+Sam to bam using samtools
+						
+						-Created a script in bash using samtools to convert sam to bam : 
+						/var/folders/x3/cql658p15ts__8mqw6cwrfn00000gn/T/53437c04/talapas-ln1.uoregon.edu/projects/bgmp/gperez8/Bi621/PS8/sam_to_bam.sh
+sam_to_bam.sh
+
+					-specifies what shell interpreter to use and must be on first line
+#!/bin/bash
+			
+					-special comments that communicate job flags to SLURM 
+#SBATCH --account=bgmp
+#SBATCH --partition=bgmp
+#SBATCH --job-name=PS8
+#SBATCH --output=slurm-%j-%x.out
+#SBATCH --time=0-01:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=7
+							-makes sure to use the correct python version
+conda deactivate
+conda deactivate
+conda deactivate
+conda deactivate
+conda activate bgmp_py3
+
+							-converts sam to bam using samtools
+/usr/bin/time -v samtools -bh aligned_Danio_rerio.GRCz11Aligned.out.sam > aligned_Danio_rerio.GRCz11Aligned.out.bam
+
+							-submitting a job script 
+(bgmp_py3) [gperez8@talapas-ln1 PS8]$ sbatch sam_to_bam.sh 
+Submitted batch job 9617867
+
+							-output after job finished running
+(bgmp_py3) [gperez8@talapas-ln1 PS8]$ cat slurm-9617867-PS8.out
+	Command being timed: "samtools view -bh aligned_Danio_rerio.GRCz11Aligned.out.sam"
+	User time (seconds): 90.76
+	System time (seconds): 1.64
+	Percent of CPU this job got: 99%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 1:32.78
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 5124
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 6031
+	Voluntary context switches: 1118
+	Involuntary context switches: 134
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+
+
+
+
+
+Sorted bam using samtools
+							
+							-Created a script that sorts a bam file using samtools.
+							/var/folders/x3/cql658p15ts__8mqw6cwrfn00000gn/T/53437c04/talapas-ln1.uoregon.edu/projects/bgmp/gperez8/Bi621/PS8/MAYBE_OLD/sort_bam.sh
+
+
+sort_bam.sh
+
+-specifies what shell interpreter to use and must be on first line
+#!/bin/bash
+			
+					-special comments that communicate job flags to SLURM 
+#SBATCH --account=bgmp
+#SBATCH --partition=bgmp
+#SBATCH --job-name=PS8
+#SBATCH --output=slurm-%j-%x.out
+#SBATCH --time=0-01:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=7
+							-makes sure to use the correct python version
+conda deactivate
+conda deactivate
+conda deactivate
+conda deactivate
+conda activate bgmp_py3
+
+							-sorts bam file
+/usr/bin/time -v samtools sort aligned_Danio_rerio.GRCz11Aligned.out.bam -o sorted_Danio_rerio.GRCz11Aligned.out.bam
+
+
+
+							-submitting a job script 
+(bgmp_py3) [gperez8@talapas-ln1 PS8]$ sbatch sort_bam.sh
+Submitted batch job 9618054
+
+							-output after job finished running
+[gperez8@talapas-ln1 PS8]$ cat slurm-9618054-PS8_sort.out
+[bam_sort_core] merging from 8 files and 1 in-memory blocks...
+	Command being timed: "samtools sort aligned_Danio_rerio.GRCz11Aligned.out.bam -o sorted_Danio_rerio.GRCz11Aligned.out.bam"
+	User time (seconds): 134.67
+	System time (seconds): 1.77
+	Percent of CPU this job got: 99%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 2:17.44
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 881520
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 77586
+	Voluntary context switches: 3172
+	Involuntary context switches: 69
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+
+
+
+Index bam using samtools
+
+
+							-Created a script that index a bam file using samtools
+							/var/folders/x3/cql658p15ts__8mqw6cwrfn00000gn/T/53437c04/talapas-ln1.uoregon.edu/projects/bgmp/gperez8/Bi621/PS8/MAYBE_OLD/index_file.sh 
+
+index_file.sh 
+
+-specifies what shell interpreter to use and must be on first line
+#!/bin/bash
+			
+					-special comments that communicate job flags to SLURM 
+#SBATCH --account=bgmp
+#SBATCH --partition=bgmp
+#SBATCH --job-name=PS8
+#SBATCH --output=slurm-%j-%x.out
+#SBATCH --time=0-01:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=7
+							-makes sure to use the correct python version
+conda deactivate
+conda deactivate
+conda deactivate
+conda deactivate
+conda activate bgmp_py3
+
+							-index a bam file using samtools
+/usr/bin/time -v samtools index sorted_Danio_rerio.GRCz11Aligned.out.bam
+
+							-submitting a job script 
+(bgmp_py3) [gperez8@talapas-ln1 PS8]$ sbatch index_file.sh
+Submitted batch job 9618080
+
+							-output after job finished running
+(bgmp_py3) [gperez8@talapas-ln1 PS8]$ cat slurm-9618080-PS8.out
+	Command being timed: "samtools index sorted_Danio_rerio.GRCz11Aligned.out.bam"
+	User time (seconds): 8.72
+	System time (seconds): 0.21
+	Percent of CPU this job got: 99%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:08.98
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 12976
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 5411
+	Voluntary context switches: 77
+	Involuntary context switches: 11
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+
+
+
+
+Extract all reads from chromosome 1 into a new SAM file using samtools
+
+							-Created a script that extracts all reads from chromosome 1 into a new sam file using samtools
+							/var/folders/x3/cql658p15ts__8mqw6cwrfn00000gn/T/53437c04/talapas-ln1.uoregon.edu/projects/bgmp/gperez8/Bi621/PS8/extract_chrome1.sh
+extract_chrome1.sh
+
+-specifies what shell interpreter to use and must be on first line
+#!/bin/bash
+			
+					-special comments that communicate job flags to SLURM 
+#SBATCH --account=bgmp
+#SBATCH --partition=bgmp
+#SBATCH --job-name=PS8
+#SBATCH --output=slurm-%j-%x.out
+#SBATCH --time=0-01:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=7
+							-makes sure to use the correct python version
+conda deactivate
+conda deactivate
+conda deactivate
+conda deactivate
+conda activate bgmp_py3
+
+							-extracts all reads from chromosome 1 into a new SAM file using samtools
+/usr/bin/time -v samtools view -h sorted_Danio_rerio.GRCz11Aligned.out.bam 1 -o chrm1_Danio_rerio.GRCz11Aligned.out.sam
+
+
+
+							-submitting a job script 
+(bgmp_py3) [gperez8@talapas-ln1 PS8]$ sbatch extract_chrome1.sh 
+Submitted batch job 9618099
+
+							
+							-output after job finished running
+(bgmp_py3) [gperez8@talapas-ln1 PS8]$ cat slurm-9618099-PS8.out
+	Command being timed: "samtools view -h sorted_Danio_rerio.GRCz11Aligned.out.bam 1 -o chrm1_Danio_rerio.GRCz11Aligned.out.sam"
+	User time (seconds): 0.81
+	System time (seconds): 0.06
+	Percent of CPU this job got: 90%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:00.96
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 6500
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 1864
+	Voluntary context switches: 241
+	Involuntary context switches: 1
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+
+
+							-confirmation by outputting the first 50 lines of the reultled file
+(bgmp_py3) [gperez8@talapas-ln1 PS8]$ head -50 chrm1_Danio_rerio.GRCz11Aligned.out.sam
+@HD	VN:1.4	SO:coordinate
+@SQ	SN:10	LN:45420867
+@SQ	SN:11	LN:45484837
+@SQ	SN:12	LN:49182954
+@SQ	SN:13	LN:52186027
+@SQ	SN:14	LN:52660232
+@SQ	SN:15	LN:48040578
+@SQ	SN:16	LN:55266484
+@SQ	SN:17	LN:53461100
+@SQ	SN:18	LN:51023478
+@SQ	SN:19	LN:48449771
+@SQ	SN:1	LN:59578282
+@SQ	SN:20	LN:55201332
+@SQ	SN:21	LN:45934066
+@SQ	SN:22	LN:39133080
+@SQ	SN:23	LN:46223584
+@SQ	SN:24	LN:42172926
+@SQ	SN:25	LN:37502051
+@SQ	SN:2	LN:59640629
+@SQ	SN:3	LN:62628489
+@SQ	SN:4	LN:78093715
+@SQ	SN:5	LN:72500376
+@SQ	SN:6	LN:60270059
+@SQ	SN:7	LN:74282399
+@SQ	SN:8	LN:54304671
+@SQ	SN:9	LN:56459846
+@SQ	SN:MT	LN:16596
+@PG	ID:STAR	PN:STAR	VN:2.7.1a	CL:STAR   --runMode alignReads   --runThreadN 7   --genomeDir Danio_rerio.GRCz11.dna.ens97.STAR_2.7.1a   --readFilesIn dre_WT_ovar12_R1.qtrim.fq.gz   dre_WT_ovar12_R2.qtrim.fq.gz      --readFilesCommand zcat      --outFileNamePrefix aligned_Danio_rerio.GRCz11   --outSAMunmapped Within   KeepPairs      --outFilterMultimapNmax 3   --alignIntronMax 1000000   --alignMatesGapMax 1000000
+@CO	user command line: STAR --runThreadN 7 --runMode alignReads --outFilterMultimapNmax 3 --outSAMunmapped Within KeepPairs --alignIntronMax 1000000 --alignMatesGapMax 1000000 --readFilesCommand zcat --readFilesIn dre_WT_ovar12_R1.qtrim.fq.gz dre_WT_ovar12_R2.qtrim.fq.gz --genomeDir Danio_rerio.GRCz11.dna.ens97.STAR_2.7.1a --outFileNamePrefix aligned_Danio_rerio.GRCz11
+K00337:113:HN7KGBBXX:4:2105:11860:30767-ACGAAGGT^AGTGCTGT	99	1	26	255	92M	=	226	292	AAACATTTTCAATCATTACATTGTCATTTTCCCTCCAAATTAAATTTAGCCAGAGGCGCACAACATACGACCTCTAAAAAAGGTGCTGTAAC	FJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJFJJJJJJJJ	NH:i:1	HI:i:1	AS:i:178	nM:i:2
+K00337:113:HN7KGBBXX:4:1215:27641:10774-ATCGAACC^ACGACTTG	99	1	30	255	92M	=	122	183	ATTTTCAATCATTACATTGTCATTTTCCCTCCAAATTAAATTTAGCCAGAGGCGCACAACATACGACCTCTAAAAAAGGTGCTGTAACATGT	JJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ	NH:i:1	HI:i:1	AS:i:178	nM:i:1
+K00337:113:HN7KGBBXX:4:1215:27641:10774-ATCGAACC^ACGACTTG	147	1	122	255	91M	=	30	-183	ACCTATATGCAGCACCACTATATGAGAGCGGCATAGCAGTGTTTAGTCACNTGGTTGCTTTGTTTATATTAACTTGAAAGTGTGTTTTAGC	JJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJFJJ#JJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ	NH:i:1	HI:i:1	AS:i:178	nM:i:1
+K00337:113:HN7KGBBXX:4:2105:11860:30767-ACGAAGGT^AGTGCTGT	147	1	226	255	92M	=	26	-292	CAAGGGGAGCGGTTTACATTGAATTAAAGGCAACTACTGATGGGTTGTGTAATGTTTCAAAGAGCTGTTGCAGCATGAGTGGAAAATAAAAC	<JJJJJJJJJFJJJJJJJJJJJJJJJJJJJJJJJJJJJJJF<JJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJFFJJJJJJJFAJ	NH:i:1	HI:i:1	AS:i:178	nM:i:2
+K00337:113:HN7KGBBXX:4:2106:27762:30011-GAGAAGAG^TGTGTGTG	99	1	390	255	92M	=	683	378	GGAACAGCTAAAGTTTATGAAAAATTTTAATCTGGATGTAGAGAATCTCATAGCACAGAAACAGCACTCCTAAAGATGCATTTATACTTCTG	FJFJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ	NH:i:1	HI:i:1	AS:i:167	nM:i:4
+K00337:113:HN7KGBBXX:4:2210:23449:22045-GGAATTGG^ACGAAGGT	99	1	617	255	92M	=	832	307	CCTAACCTAGTCCTCATCTTCAGTCAGTAATTTGGGGGCCATGTCTGACAGCAACCTGTGTAAGGCCAGATGAAGCATCTGTAAAACTCAAT	JJJJJJJJJJJJJJJJJJJJJJJFJJJFJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ	NH:i:1	HI:i:1	AS:i:172	nM:i:5
+K00337:113:HN7KGBBXX:4:2106:27762:30011-GAGAAGAG^TGTGTGTG	147	1	683	255	85M7S	=	390	-378	CAGATGAAGCATCTGTAAAACTCAATTTCTTCATCGTAATGTTGCCAAAATGACAAGCTATTAATAACTGATGCAGAAAAGCTTAATTCATG	AFJJJJJJJJJJJJJJJJJJJJJJ<JJJJJJJJJJJJJJJJJJJJJJJJJJJJJJFFJJJJJJJJJJJJJJJJFJJJJJJFJJJJJJJJJFF	NH:i:1	HI:i:1	AS:i:167	nM:i:4
+K00337:113:HN7KGBBXX:4:2210:23449:22045-GGAATTGG^ACGAAGGT	147	1	832	255	92M	=	617	-307	CCTCACTAACAAACTGCAGCTGGTTCAAAATGCAGCTGCTAGAGTGATTTCTAGAACTAAGAAATCACATTACTCCTGTTCTTTCATCGGTG	JJJJJJJJJJJJJJJJJJJJJJJJFJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJFJJJJJJJJJJJJJJJJJJ	NH:i:1	HI:i:1	AS:i:172	nM:i:5
+K00337:113:HN7KGBBXX:4:2204:5274:44781-AGGACATG^AGACACTC	99	1	1261	255	27M5D32M33S	=	1343	168	CTTTGGTCGGTTGGCAAACTGGCTCGCTTGGGGCTTGTGTAGTTGAGCATGGAAGGATTTTCTTCATTGTTTGGACTTTCAGCAGTGAAAAT	J77AJJ7<AAJFFJJJF<<FFFAF-FA7-FJJJAF7AFFJJJAFJJJJJFFFAJFJFJJ<JJJJJAJFF<-FAFFJFFJJJJ<JJ<F7<J<7	NH:i:1	HI:i:1	AS:i:123	nM:i:4
+K00337:113:HN7KGBBXX:4:2204:5274:44781-AGGACATG^AGACACTC	147	1	1343	255	86M3S	=	1261	-168	CAGCAGTGAAAATTAAATACTGAAATTAATCTCTGAAAACTGAGCTGATTTAAAACTCATACCTGATGTGAAACGAAGCATGCACAAAG	JF7F<JJJJJJJJJAFJJJFJAJJJJJJJJJJJJJJJJJJJJFJJFJJJJJJJJFJJJJJFJJJJFJJJ<JJJJAJJJJJJJFJJJJJJ	NH:i:1	HI:i:1	AS:i:123	nM:i:4
+K00337:113:HN7KGBBXX:4:1227:2920:20375-CTAGGAAG^CTGTTCAC	99	1	1929	255	25S62M5S	=	1992	154	GTTTTTTTTGTTTTTGGTAGTGAGACACTACCAAAAGAAATTCTTGATACTTGAGAAATTTCCATTTAAATTTGAGATTTTTGAAGAAACTG	FJFJJJJJJJJJJJJJJJJJJJJJFJJJJJFJJJFJFJJJJFJJJJFJFJJJJJJFJJJJJJJJJFJJJJJJJJJJJFJJFJJJFJJJJ7AF	NH:i:1	HI:i:1	AS:i:130	nM:i:10
+K00337:113:HN7KGBBXX:4:1227:2920:20375-CTAGGAAG^CTGTTCAC	147	1	1992	255	1S91M	=	1929	-154	AGAAACTGGAACAGGTAAAGTTAAAATATTTATAGGTGAAGAGGTTCCAATNTTCCCATGAAATTGAGATTTTGTAAAAGAGTGAAGTGGGG	J<JJJJJFAJJFF7JJJJJJJJJJFJFJJJJJFJJJJAJJJJJJJJJJJJF#F<JJJJFJJJJJJJJJJFJJJJJJJJJAFJJJJJJJJJJJ	NH:i:1	HI:i:1	AS:i:130	nM:i:10
+K00337:113:HN7KGBBXX:4:2122:3853:47700-CTCAGTCT^GTGATGAG	99	1	2519	255	92M	=	3047	620	GCACAATGTGCTGTTGTGTGGAGGTGCTAATCACCAGTAGAAGATTGGGCTTCATTTAAGGCCTGTTCGCCCCCGGCCACCTTCCCTGCGTG	JJFJAFJFAJJJFJFJJJJJJFJJJJJJJJJJJJJJJJJJJJJJJJJ7FJ<JJJJJJJJJFJJJJJJJJJJJJJJJJJJJJJFJJJJJJJFF	NH:i:1	HI:i:1	AS:i:174	nM:i:4
+K00337:113:HN7KGBBXX:4:2122:3853:47700-CTCAGTCT^GTGATGAG	147	1	3047	255	92M	=	2519	-620	GATATATCTTTGTAGATATATCATTCTTCTACCAGATGTCTCCCCTAAGGCAATGCAAGAGCCAAACAGACATCATCCTTATCAGGGATAAC	JFFA-A<JJFJ<F-FJJJJJ<FFF-FA<F<FAA7-F<FA--<7-F-FAJFFJJJJAFF7A-JJFJAF--<-A<F-AFJAFAFFF-<JFF--A	NH:i:1	HI:i:1	AS:i:174	nM:i:4
+K00337:113:HN7KGBBXX:4:2126:4858:35655-AGAGGAGA^GAAGACCA	99	1	6613	255	91M	=	9660	3521	GCTAAACACACACACAAACACGCACACACTGAAGGTTAGCAGTGAATCTTTATTAGCACATCAGAGTTTAGCGTTTGCCACCGACGCGAGG	JJJJJJJJJJJJJJJJJJJJJJAAJJJJJJJJJJJJJJJJJJJJFJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ	NH:i:1	HI:i:1	AS:i:178	nM:i:0
+K00337:113:HN7KGBBXX:4:1106:24282:2246-TACGAACC^ACGACTTG	99	1	6642	255	7S85M	=	6950	2998	TTTTTTTTGAAGGTTAGCAGTGCATCTTTATTAGCACATCAGAGTTTAGCGTTTGCCACCGACGCGAGGAGCGCTGACCTTCATGGGCTTGG	JJJJJJJJJJJJJJJJJFJJJJ-<FFJJJJJJJJJJJJJFFJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ	NH:i:1	HI:i:1	AS:i:170	nM:i:1
+K00337:113:HN7KGBBXX:4:1110:18690:18616-CAACTGGT^GACATGAG	99	1	6642	255	8S84M	=	10177	4984	TTTTTTTTTGAAGGTTAGCAGTNAATCTTTATTAGCACATCAGAGTTTAGCGTTTGCCACCGACGCGAGGAGCGCTGACCTTCATGGGCTTG	JJJJJJJJJ<7AFAJJ-<<AAJ#AAJFJJJFJJJFJJFAJAAA<<JJJF7F-JJJFJF7FAJAFFJFJ<AFFJJJJJJJJJJJJJJJJJJJA	NH:i:1	HI:i:1	AS:i:171	nM:i:1
+K00337:113:HN7KGBBXX:4:1121:28554:23540-TCGACTTC^TCAGGACT	99	1	6642	255	13S79M	=	9593	3043	TTTTTTTTTTTTTTGAAGGTTAGCAGTGAATCTTTATTAGCACATCAGAGTTTAGCGTTTGCCACCGACGCGAGGAGCGCTGACCTTCATGG	JJJJJJJJJJJJJJJJFJJJJAFJJ7F7AJFFJJJJJJFJFAAJF-FJAJF<J<77<JAJ7FA-<FA7FJ<F<JJ<JJJA<<AAJJJJJJJF	NH:i:1	HI:i:1	AS:i:168	nM:i:0
+K00337:113:HN7KGBBXX:4:1217:15798:26090-ATCGCGTA^ACGAAGGT	99	1	6642	255	9S83M	=	6932	2984	TTTTTTTTTTGAAGGTTAGCAGTGAATCTTTATTAGCACATCAGAGTTTAGCGTTTGCCACCGACGCGAGGAGCGCTGACCTTCATGGGCTT	JJJJJJJJJJ-<-<FFJA<<7<F<7FJ<JJJFJJFF<AF7JA7<A-AJJFFAJJJJFJFJJFAAJ<JAFJJF<JJJJJFFFJJJJJ<AJJJJ	NH:i:1	HI:i:1	AS:i:173	nM:i:0
+K00337:113:HN7KGBBXX:4:2108:31812:39031-ATCGAACC^TCGTCATC	99	1	6642	255	8S84M	=	9683	3518	TTTTTTTTTGAAGGTTAGCAGTGAATCTTTATTAGCACATCAGAGTTTAGCGTTTGCCACCGACGCGAGGAGCGCTGACCTTCATGGGCTTG	JJJJJJJJJAF-AA-FF7AJFFAJJJJFFFFJJJFJJJJJJJFFJF<FJ<J-F<A-<JJJJAAJ-A<<A<J-FAJ<7JJJ7-F<FJJ<JFJ-	NH:i:1	HI:i:1	AS:i:168	nM:i:3
+K00337:113:HN7KGBBXX:4:2109:8816:17649-TCCACATC^CGATTACG	99	1	6642	255	7S85M	=	10182	5115	TTTTTTTTGAAGGTTAGCAGTGAATATTTATTAGCACATCAGAGTTTAGCGTTTGCCACCGACGCGAGGAGCGCTGACCTTCATGGGCTTGG	JJJJJJJJJJJJJJJJJJJJJJJJJFJJJJJJJJJJJJJJJJJJFJFJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ	NH:i:1	HI:i:1	AS:i:176	nM:i:1
+
+
+
+
+
+
+Reporting how many reads on new sam file using samtools
+
+							-Created a script that reports how many reads on the new sam file using samtools
+							/private/var/folders/x3/cql658p15ts__8mqw6cwrfn00000gn/T/53437c04/talapas-ln1.uoregon.edu/projects/bgmp/gperez8/Bi621/PS8/reads_chrm1.sh
+
+reads_chrm1.sh
+
+specifies what shell interpreter to use and must be on first line
+#!/bin/bash
+			
+					-special comments that communicate job flags to SLURM 
+#SBATCH --account=bgmp
+#SBATCH --partition=bgmp
+#SBATCH --job-name=PS8
+#SBATCH --output=slurm-%j-%x.out
+#SBATCH --time=0-01:00:00
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=7
+							-makes sure to use the correct python version
+conda deactivate
+conda deactivate
+conda deactivate
+conda deactivate
+conda activate bgmp_py3
+
+
+							-reports how many reads on new sam file using samtools
+/usr/bin/time -v samtools view chrm1_Danio_rerio.GRCz11Aligned.out.sam | wc -l
+
+							-submitting a job script 
+(bgmp_py3) [gperez8@talapas-ln1 PS8]$ sbatch reads_chrm1.sh
+Submitted batch job 9618137
+
+							 
+							-output after job finished running
+							-number for reads on chromosome 1 prints at the end of output
+(bgmp_py3) [gperez8@talapas-ln1 PS8]$ cat slurm-9618137-PS8.out
+	Command being timed: "samtools view chrm1_Danio_rerio.GRCz11Aligned.out.sam"
+	User time (seconds): 1.13
+	System time (seconds): 0.22
+	Percent of CPU this job got: 99%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:01.36
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 2608
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 830
+	Voluntary context switches: 65
+	Involuntary context switches: 3
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 0
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+922600
+
+
+Part 2 – Python and SAM 
+
+Purpose: to create a python program to parse the contents of your BAM file . 
+.
+
+							-Created a test test file from the aligned sam file.
+							(bgmp_py3) [gperez8@talapas-ln1 PS8]$ head -100 aligned_Danio_rerio.GRCz11Aligned.out.sam > test.sam 
+
+							-Created a python script that counts up the number of reads that are properly mapped to the reference genome and the number of reads that are not mapped to the genome. 
+							/var/folders/x3/cql658p15ts__8mqw6cwrfn00000gn/T/53437c04/talapas-ln1.uoregon.edu/projects/bgmp/gperez8/Bi621/PS8/parse_sam.py
+
+parse_sam.py
+
+
+# Imports modules
+import re
+import argparse
+
+# Creates an arguement passer
+parser = argparse.ArgumentParser(description="Program parses the contents of your BAM file. \
+count up the number of reads that are properly mapped to the reference genome and the number \
+of reads that are not mapped to the genome")
+
+# Adds arguemets by calling the arguement passer
+parser.add_argument("-f", "--filename", help="specify the filename", required=True)
+
+
+# Parses arguemets through using the parse args method.
+args = parser.parse_args()
+
+# Creates a variable
+mapped=0
+unmapped=0
+
+#Opens a text file to read. stores the file as a variable.
+with open(args.filename, 'r') as fh:
+
+    # A for loop that goes through each line in the file.
+    for line in fh:
+
+        # If statement that uses regex to find the first the line with a specific first charcter.
+        if re.match(r'^K', line):
+
+            # splits the line into an array everytime it encounters a tab.
+            parts = line.split('\t')
+
+            # converts the index one in the array  into to an int and stores it as a variable.
+            flags=int(parts[1])
+
+            # if statement that checks if check the current read is mapped and counts for mapped and unmapped.
+            if ((flags & 4)!=4):
+                if((flags & 256) != 256):
+                    mapped=mapped+1
+            else: unmapped=unmapped+1
+
+# opens a text file to read and stores the text file as a variable.
+f1 = open("mapped_vs_unmapped.tsv", "w")
+
+# writes the formatted output to the tsv file
+f1.write("mapped:{0}\tunmapped:{1}\n".format(mapped,unmapped))
+
+# Pete said that this was Okay.
+								-Submiited the job through the interactive node
+((bgmp_py3) [gperez8@talapas-ln1 PS8]$ srun --account=bgmp --partition=bgmp --nodes=1 --ntasks-per-node=1 python parse_sam.py -f aligned_Danio_rerio.GRCz11Aligned.out.sam
+srun: job 9618794 queued and waiting for resources
+srun: job 9618794 has been allocated resources
+mapped: 21770707
+unmapped: 1726456
+
+								—cat the mapped_vs_unmapped.tsv file to see output.
+(bgmp_py3) [gperez8@talapas-ln1 PS8]$ cat mapped_vs_unmapped.tsv
+mapped:21770707	unmapped:1726456
+
+
+
+
